@@ -37,13 +37,10 @@ const gray = (s: string) => paint("90", s);
 // ── Backend config (env-driven → "backend agnostic") ────────────────────────
 const BASE_URL = (
   process.env.COBLINK_BASE_URL ??
-  process.env.OPENAI_BASE_URL ??
   "http://localhost:1234/v1"
 ).replace(/\/+$/, "");
-const API_KEY =
-  process.env.COBLINK_API_KEY ?? process.env.OPENAI_API_KEY ?? "not-needed";
-const MODEL =
-  process.env.COBLINK_MODEL ?? process.env.OPENAI_MODEL ?? "local-model";
+const API_KEY = process.env.COBLINK_API_KEY;
+const MODEL = process.env.COBLINK_MODEL ?? "any";
 
 // ── Runtime config (assigned from CLI args inside the import.meta.main block) ─
 let base = "main";
@@ -51,8 +48,6 @@ let custom: string | undefined;
 let outPath: string | undefined;
 let jobs = DEFAULT_JOBS;
 let idleMs = DEFAULT_IDLE_SECONDS * 1000;
-let failOnRaw = "off";
-let failOnRank = Infinity;
 let stagedFlag = false;
 let workingFlag = false;
 
@@ -76,6 +71,7 @@ const SKIP_EXTENSIONS = new Set([
   ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a", ".wasm",
   ".class", ".jar", ".pyc", ".node",
   ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".map",
+  ".snap",
 ]);
 
 /** True for lockfiles, assets, and known binary/compiled extensions. */
@@ -84,6 +80,7 @@ export function isNoise(file: string): boolean {
   if (SKIP_FILENAMES.has(name)) return true;
   if (name.endsWith(".lock")) return true;
   if (name.endsWith(".min.js") || name.endsWith(".min.css")) return true;
+  if (name.endsWith(".d.ts")) return true;
   if (!name.includes(".")) return false;
   return SKIP_EXTENSIONS.has(name.slice(name.lastIndexOf(".")));
 }
@@ -240,13 +237,30 @@ function emit(task: Task, text: string): void {
 
 function messagesFor(task: Task) {
   const system =
-    "You are an expert code reviewer. You are given the git diff of a single " +
-    "file. Give a concise, specific review: flag bugs, security issues, " +
-    "performance problems, and readability concerns, and note anything done " +
-    "well. Prefer short bullet points. On the final line, output exactly " +
-    "'SEVERITY: <level>' where <level> is one of none, low, medium, high, " +
-    "critical — reflecting the most serious issue found." +
-    (custom ? `\n\nAdditional reviewer instructions: ${custom}` : "");
+    "Review a single-file git diff for a pull request.\n\n" +
+    "Report only:\n" +
+    "- Bugs: incorrect logic, off-by-one, null/undefined risk, race conditions\n" +
+    "- Security: injection, auth bypass, secret exposure, unsafe input\n" +
+    "- Performance: quadratic loops, N+1, blocking I/O on hot paths\n" +
+    "- Readability: only when it obscures correctness\n\n" +
+    "Rules:\n" +
+    "- Cite specific lines from the diff.\n" +
+    "- Do NOT summarize the diff or restate what the code does.\n" +
+    "- Do NOT speculate about code outside the diff (callers, other files, framework internals).\n" +
+    "- Use short bullets. No praise, no preamble.\n" +
+    "- If nothing is wrong, say so in one line.\n\n" +
+    "End with exactly one line:\n" +
+    "SEVERITY: <none|low|medium|high|critical>\n\n" +
+    "Rubric (advisory, shown in summary only):\n" +
+    "- none: no issues\n" +
+    "- low: nit; no effect on correctness\n" +
+    "- medium: real bug or bad pattern, contained blast radius\n" +
+    "- high: likely production bug, data-loss risk, or security flaw\n" +
+    "- critical: severe security issue, guaranteed data loss, or RCE" +
+    (custom
+      ? `\n\n<extra_instructions>\n${custom}\n</extra_instructions>\n` +
+        "Instructions above override defaults where they conflict."
+      : "");
   const user = `File: ${task.file}\n\n\`\`\`diff\n${task.diff}\n\`\`\``;
   return [
     { role: "system", content: system },
@@ -272,9 +286,11 @@ async function review(task: Task): Promise<void> {
     resetIdle();
     let res: Response;
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (API_KEY) headers.Authorization = `Bearer ${API_KEY}`;
       res = await fetch(`${BASE_URL}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+        headers,
         body: JSON.stringify({ model: MODEL, stream: true, messages: messagesFor(task) }),
         signal: reqAbort.signal,
       });
@@ -450,9 +466,6 @@ async function main() {
 
 async function finish(tasks: Task[], src: Source) {
   const anyError = tasks.some((t) => t.error);
-  let maxRank = 0;
-  for (const t of tasks) if (!t.error) maxRank = Math.max(maxRank, rankOf(t.severity));
-  const overall = SEVERITIES[maxRank];
 
   process.stdout.write("\n" + bold("Summary") + "\n");
   const width = Math.min(48, Math.max(...tasks.map((t) => t.file.length), 4));
@@ -461,15 +474,13 @@ async function finish(tasks: Task[], src: Source) {
     const val = t.error ? red("error") : sevColor(t.severity);
     process.stdout.write(gray("  " + label) + "  " + val + "\n");
   }
-  process.stdout.write(gray("  " + "overall".padEnd(width)) + "  " + sevColor(overall) + "\n");
 
   if (outPath) {
     const lines = [
       `# Coblink review`, ``,
       `- Source: \`${src.label}\``,
       `- Model: \`${MODEL}\``,
-      `- Generated: ${new Date().toISOString()}`,
-      `- Overall severity: **${overall}**`, ``, `---`, ``,
+      `- Generated: ${new Date().toISOString()}`, ``, `---`, ``,
     ];
     for (const t of tasks) {
       lines.push(`## ${t.file}`, ``);
@@ -488,10 +499,6 @@ async function finish(tasks: Task[], src: Source) {
   if (interrupted) {
     process.stdout.write("\n" + yellow("✖ Interrupted.") + "\n\n");
     process.exit(130);
-  }
-  if (maxRank >= failOnRank) {
-    process.stdout.write("\n" + red(`✖ Severity ${overall} ≥ fail-on ${failOnRaw}.`) + "\n\n");
-    process.exit(1);
   }
   if (anyError) {
     process.stdout.write("\n" + yellow("✔ Done, with request errors.") + "\n\n");
@@ -512,23 +519,27 @@ ${bold("OPTIONS")}
   -j, --jobs <n>         Files reviewed concurrently         (default: ${DEFAULT_JOBS})
   -o, --out <file>       Also write a markdown report
       --staged           Review staged changes (git diff --cached)
-      --working          Review all uncommitted changes (git diff HEAD)
-      --fail-on <level>  Exit non-zero at/above severity:
-                         none|low|medium|high|critical|off   (default: off)
+      --working          Review modified tracked files (excludes untracked)
       --timeout <secs>   Abort a request after N idle seconds (default: ${DEFAULT_IDLE_SECONDS})
   -h, --help             Show this help
   -v, --version          Print version and exit
 
 ${bold("ENVIRONMENT")}
   COBLINK_BASE_URL   OpenAI-compatible endpoint  (default: http://localhost:1234/v1)
-  COBLINK_MODEL      Model name                  (default: local-model)
+  COBLINK_MODEL      Model name                  (default: any)
   COBLINK_API_KEY    API key (optional for local backends)
 
 ${bold("EXAMPLES")}
   coblink                              Review current branch vs main
   coblink -b develop -j 4              Diff vs develop, 4 files at a time
-  coblink --staged --fail-on high      Gate a commit on staged changes
+  coblink --staged                     Review staged changes before committing
   coblink -o review.md -c "security"   Save a report, security-focused
+
+${bold("EXIT CODES")}
+  0  review completed
+  1  one or more requests failed (backend unreachable, HTTP error, timeout)
+  2  invalid CLI arguments
+  130 interrupted (Ctrl-C)
 `;
 
 if (import.meta.main) {
@@ -541,7 +552,6 @@ if (import.meta.main) {
       out: { type: "string", short: "o" },
       staged: { type: "boolean", default: false },
       working: { type: "boolean", default: false },
-      "fail-on": { type: "string", default: "off" },
       timeout: { type: "string", default: String(DEFAULT_IDLE_SECONDS) },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
@@ -565,11 +575,6 @@ if (import.meta.main) {
   idleMs = Math.max(1, parseInt(values.timeout ?? "", 10) || DEFAULT_IDLE_SECONDS) * 1000;
   stagedFlag = Boolean(values.staged);
   workingFlag = Boolean(values.working);
-  failOnRaw = (values["fail-on"] ?? "off").toLowerCase();
-  if (failOnRaw !== "off" && rankOf(failOnRaw) === -1) {
-    dieEarly(`--fail-on must be one of: ${SEVERITIES.join(", ")}, off`);
-  }
-  failOnRank = failOnRaw === "off" ? Infinity : rankOf(failOnRaw);
 
   process.on("SIGINT", () => {
     if (interrupted) process.exit(130);
