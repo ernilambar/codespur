@@ -4,7 +4,40 @@ AI-powered PR reviewer.
 
 ## Install
 
-Download the binary for your platform from [Releases](https://github.com/ernilambar/codespur/releases) and put it on your `PATH`.
+**macOS (Apple Silicon)** — prebuilt binary:
+
+```bash
+curl -L -o codespur https://github.com/ernilambar/codespur/releases/latest/download/codespur-darwin-arm64
+chmod +x codespur
+sudo mv codespur /usr/local/bin/
+sudo xattr -d com.apple.quarantine /usr/local/bin/codespur 2>/dev/null || true
+codespur --version
+```
+
+**Other platforms** — build from source (requires [Bun](https://bun.sh) ≥ 1.1.0):
+
+```bash
+git clone https://github.com/ernilambar/codespur.git
+cd codespur && bun install && bun run build
+sudo mv codespur /usr/local/bin/
+```
+
+## Configure
+
+Point at any OpenAI-compatible backend:
+
+```bash
+export CODESPUR_BASE_URL="http://localhost:1234/v1"
+export CODESPUR_MODEL="qwen2.5-coder"
+export CODESPUR_API_KEY="sk-..."        # optional for local backends
+```
+
+| Backend | `CODESPUR_BASE_URL` |
+|---------|--------------------|
+| LM Studio | `http://localhost:1234/v1` |
+| Ollama | `http://localhost:11434/v1` |
+| OpenAI | `https://api.openai.com/v1` |
+| DeepSeek | `https://api.deepseek.com/v1` |
 
 ## Usage
 
@@ -32,23 +65,6 @@ codespur -o review.md -c "security"   # save a report, security-focused
 
 > [!NOTE]
 > Codespur is **advisory**. Severity is an LLM opinion, not a gate — do not use it to block merges automatically. Pipe the output to a human reviewer or a report.
-
-## Backend
-
-Set these env vars to point at any OpenAI-compatible backend:
-
-```bash
-export CODESPUR_BASE_URL="http://localhost:1234/v1"
-export CODESPUR_MODEL="qwen2.5-coder"
-export CODESPUR_API_KEY="sk-..."        # optional for local backends
-```
-
-| Backend | `CODESPUR_BASE_URL` |
-|---------|--------------------|
-| LM Studio | `http://localhost:1234/v1` |
-| Ollama | `http://localhost:11434/v1` |
-| OpenAI | `https://api.openai.com/v1` |
-| DeepSeek | `https://api.deepseek.com/v1` |
 
 ## Contributing
 
