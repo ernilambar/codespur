@@ -4,7 +4,7 @@ AI-powered PR reviewer.
 
 ## Install
 
-**macOS (Apple Silicon)** — prebuilt binary:
+**macOS** — prebuilt binary (replace `arm64` with `amd64` for Intel Macs):
 
 ```bash
 curl -L -o codespur https://github.com/ernilambar/codespur/releases/latest/download/codespur-darwin-arm64
@@ -14,11 +14,11 @@ sudo xattr -d com.apple.quarantine /usr/local/bin/codespur 2>/dev/null || true
 codespur --version
 ```
 
-**Other platforms** — build from source (requires [Bun](https://bun.sh) ≥ 1.1.0):
+**Other platforms** — build from source (requires [Go](https://go.dev) ≥ 1.24):
 
 ```bash
 git clone https://github.com/ernilambar/codespur.git
-cd codespur && bun install && bun run build
+cd codespur && go build -trimpath -ldflags="-s -w" -o codespur .
 sudo mv codespur /usr/local/bin/
 ```
 
@@ -69,12 +69,21 @@ codespur -o review.md -c "security"   # save a report, security-focused
 
 ## Contributing
 
-Single-file source: `codespur.ts`. Uses only `Bun.spawnSync`, `fetch`, and `util.parseArgs` — no external dependencies. Requires [Bun](https://bun.sh).
+Requires [Go](https://go.dev) ≥ 1.24.
 
 ```bash
-bun test             # run tests
-bun run build        # → ./codespur for current platform
-bun run build:all    # → dist/ binaries for mac arm64
+go test ./...        # run tests
+go build .           # → ./codespur for current platform
+GOOS=linux GOARCH=amd64 go build -o dist/codespur-linux-amd64 .   # cross-compile
+```
+
+## Release
+
+Tags must be prefixed with `v` (e.g. `v1.0.1`). The release workflow triggers on `v*` tags only — an unprefixed tag like `1.0.1` will not build or publish binaries.
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 ## License
