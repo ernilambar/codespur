@@ -36,9 +36,8 @@ Thumbs.db
 *.zip
 *~
 
-# Bun
-*.bun-build
-
 # Project folders
 /dist/
-/node_modules/
+
+# Compiled binary
+/codespur
