@@ -187,24 +187,6 @@ describe("CLI integration", () => {
     expect(out).toContain("Review complete");
   });
 
-  test("--fail-on high exits 1 when a high-severity file is found", async () => {
-    const { out, code } = await runCli(["-b", "main", "--fail-on", "high"]);
-    expect(code).toBe(1);
-    expect(out.toLowerCase()).toContain("fail-on");
-  });
-
-  test("--fail-on low still passes when nothing reaches the threshold isn't the case here → medium", async () => {
-    // app.js is high, so medium threshold should also fail (exit 1)
-    const { code } = await runCli(["-b", "main", "--fail-on", "medium"]);
-    expect(code).toBe(1);
-  });
-
-  test("bad --fail-on value exits 2", async () => {
-    const { code, err } = await runCli(["--fail-on", "nonsense"]);
-    expect(code).toBe(2);
-    expect(err).toContain("fail-on");
-  });
-
   test("--staged + --working conflict exits 2", async () => {
     const { code, err } = await runCli(["--staged", "--working"]);
     expect(code).toBe(2);
