@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Coblink — AI-powered local PR reviewer.
+ * Codespur — AI-powered local PR reviewer.
  *
  * Zero-dependency: uses only native Bun/web APIs (Bun.spawnSync, fetch,
  * util.parseArgs). No node_modules required.
@@ -36,11 +36,11 @@ const gray = (s: string) => paint("90", s);
 
 // ── Backend config (env-driven → "backend agnostic") ────────────────────────
 const BASE_URL = (
-  process.env.COBLINK_BASE_URL ??
+  process.env.CODESPUR_BASE_URL ??
   "http://localhost:1234/v1"
 ).replace(/\/+$/, "");
-const API_KEY = process.env.COBLINK_API_KEY;
-const MODEL = process.env.COBLINK_MODEL ?? "any";
+const API_KEY = process.env.CODESPUR_API_KEY;
+const MODEL = process.env.CODESPUR_MODEL ?? "any";
 
 // ── Runtime config (assigned from CLI args inside the import.meta.main block) ─
 let base = "main";
@@ -421,7 +421,7 @@ async function main() {
   if (skippedNoise) skipParts.push(`${skippedNoise} noise`);
   if (skippedBinary) skipParts.push(`${skippedBinary} binary`);
   process.stdout.write(
-    "\n" + bold(cyan("◆ Coblink")) + dim(` v${VERSION} — local PR review`) + "\n" +
+    "\n" + bold(cyan("◆ Codespur")) + dim(` v${VERSION} — local PR review`) + "\n" +
     gray(`  source ${src.label}`) + "\n" +
     gray(`  model  ${MODEL}`) + "\n" +
     gray(`  engine ${BASE_URL}`) + "\n" +
@@ -477,7 +477,7 @@ async function finish(tasks: Task[], src: Source) {
 
   if (outPath) {
     const lines = [
-      `# Coblink review`, ``,
+      `# Codespur review`, ``,
       `- Source: \`${src.label}\``,
       `- Model: \`${MODEL}\``,
       `- Generated: ${new Date().toISOString()}`, ``, `---`, ``,
@@ -508,10 +508,10 @@ async function finish(tasks: Task[], src: Source) {
 }
 
 // ── CLI entrypoint (only when executed directly) ──────────────────────────────
-const HELP = `${bold("coblink")} v${VERSION} — AI-powered local PR reviewer
+const HELP = `${bold("codespur")} v${VERSION} — AI-powered local PR reviewer
 
 ${bold("USAGE")}
-  coblink [options]
+  codespur [options]
 
 ${bold("OPTIONS")}
   -b, --base <branch>    Base branch to diff against        (default: main)
@@ -525,15 +525,15 @@ ${bold("OPTIONS")}
   -v, --version          Print version and exit
 
 ${bold("ENVIRONMENT")}
-  COBLINK_BASE_URL   OpenAI-compatible endpoint  (default: http://localhost:1234/v1)
-  COBLINK_MODEL      Model name                  (default: any)
-  COBLINK_API_KEY    API key (optional for local backends)
+  CODESPUR_BASE_URL   OpenAI-compatible endpoint  (default: http://localhost:1234/v1)
+  CODESPUR_MODEL      Model name                  (default: any)
+  CODESPUR_API_KEY    API key (optional for local backends)
 
 ${bold("EXAMPLES")}
-  coblink                              Review current branch vs main
-  coblink -b develop -j 4              Diff vs develop, 4 files at a time
-  coblink --staged                     Review staged changes before committing
-  coblink -o review.md -c "security"   Save a report, security-focused
+  codespur                              Review current branch vs main
+  codespur -b develop -j 4              Diff vs develop, 4 files at a time
+  codespur --staged                     Review staged changes before committing
+  codespur -o review.md -c "security"   Save a report, security-focused
 
 ${bold("EXIT CODES")}
   0  review completed
@@ -560,7 +560,7 @@ if (import.meta.main) {
   });
 
   if (values.version) {
-    process.stdout.write(`coblink ${VERSION}\n`);
+    process.stdout.write(`codespur ${VERSION}\n`);
     process.exit(0);
   }
   if (values.help) {

@@ -2,7 +2,7 @@ import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import {
   isNoise, budgetDiff, parseSeverity, parseNumstatBinaries,
   rankOf, sevColor, SEVERITIES, MAX_DIFF_CHARS,
-} from "./coblink.ts";
+} from "./codespur.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -98,7 +98,7 @@ describe("budgetDiff", () => {
 });
 
 // ─────────────────────────── integration: CLI ───────────────────────────────
-const CLI = join(import.meta.dir, "coblink.ts");
+const CLI = join(import.meta.dir, "codespur.ts");
 
 let server: ReturnType<typeof Bun.serve>;
 let baseUrl = "";
@@ -135,7 +135,7 @@ function g(args: string[]) {
 async function runCli(args: string[]) {
   const proc = Bun.spawn(["bun", CLI, ...args], {
     cwd: repo,
-    env: { ...process.env, COBLINK_BASE_URL: baseUrl, COBLINK_MODEL: "mock" },
+    env: { ...process.env, CODESPUR_BASE_URL: baseUrl, CODESPUR_MODEL: "mock" },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -149,7 +149,7 @@ beforeAll(() => {
   server = Bun.serve({ port: 0, fetch: mockFetch });
   baseUrl = `http://localhost:${server.port}/v1`;
 
-  repo = mkdtempSync(join(tmpdir(), "coblink-test-"));
+  repo = mkdtempSync(join(tmpdir(), "codespur-test-"));
   g(["init", "-q", "-b", "main"]);
   g(["config", "user.email", "t@t.com"]);
   g(["config", "user.name", "test"]);
@@ -174,7 +174,7 @@ describe("CLI integration", () => {
   test("--version prints version", async () => {
     const { out, code } = await runCli(["--version"]);
     expect(code).toBe(0);
-    expect(out).toMatch(/^coblink \d+\.\d+\.\d+/);
+    expect(out).toMatch(/^codespur \d+\.\d+\.\d+/);
   });
 
   test("reviews code files, skips noise, exits 0 by default", async () => {
