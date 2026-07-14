@@ -1,0 +1,21 @@
+{
+  "name": "coblink",
+  "version": "1.1.0",
+  "description": "AI-powered local PR reviewer built on native Bun",
+  "type": "module",
+  "module": "coblink.ts",
+  "bin": {
+    "coblink": "./coblink.ts"
+  },
+  "scripts": {
+    "build": "bun build ./coblink.ts --compile --outfile coblink",
+    "build:all": "bun run build:mac-arm && bun run build:mac-x64",
+    "build:mac-arm": "bun build ./coblink.ts --compile --target=bun-darwin-arm64 --outfile dist/coblink-darwin-arm64",
+    "build:mac-x64": "bun build ./coblink.ts --compile --target=bun-darwin-x64 --outfile dist/coblink-darwin-x64",
+    "build:min": "bun build ./coblink.ts --compile --minify --sourcemap=none --outfile coblink",
+    "review": "bun run coblink.ts"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}
