@@ -35,12 +35,10 @@ const cyan = (s: string) => paint("36", s);
 const gray = (s: string) => paint("90", s);
 
 // ── Backend config (env-driven → "backend agnostic") ────────────────────────
-const BASE_URL = (
-  process.env.CODESPUR_BASE_URL ??
-  "http://localhost:1234/v1"
-).replace(/\/+$/, "");
+// baseUrl / model are validated + assigned inside the CLI entry block below.
 const API_KEY = process.env.CODESPUR_API_KEY;
-const MODEL = process.env.CODESPUR_MODEL ?? "any";
+let baseUrl = "";
+let model = "";
 
 // ── Runtime config (assigned from CLI args inside the import.meta.main block) ─
 let base = "main";
@@ -247,12 +245,11 @@ function messagesFor(task: Task) {
     "- Cite specific lines from the diff.\n" +
     "- Do NOT summarize the diff or restate what the code does.\n" +
     "- Do NOT speculate about code outside the diff (callers, other files, framework internals).\n" +
-    "- Use short bullets. No praise, no preamble.\n" +
-    "- If nothing is wrong, say so in one line.\n\n" +
-    "End with exactly one line:\n" +
-    "SEVERITY: <none|low|medium|high|critical>\n\n" +
-    "Rubric (advisory, shown in summary only):\n" +
-    "- none: no issues\n" +
+    "- Use short bullets. No praise, no preamble.\n\n" +
+    "If nothing is wrong, respond with exactly \"No issues found.\" and stop.\n" +
+    "Otherwise, end with exactly one line:\n" +
+    "SEVERITY: <low|medium|high|critical>\n\n" +
+    "Rubric (used for the Summary column):\n" +
     "- low: nit; no effect on correctness\n" +
     "- medium: real bug or bad pattern, contained blast radius\n" +
     "- high: likely production bug, data-loss risk, or security flaw\n" +
@@ -288,17 +285,17 @@ async function review(task: Task): Promise<void> {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (API_KEY) headers.Authorization = `Bearer ${API_KEY}`;
-      res = await fetch(`${BASE_URL}/chat/completions`, {
+      res = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model: MODEL, stream: true, messages: messagesFor(task) }),
+        body: JSON.stringify({ model, stream: true, messages: messagesFor(task) }),
         signal: reqAbort.signal,
       });
     } catch (e) {
       if (idledOut) throw new Error(`no response for ${idleMs / 1000}s (timed out)`);
       if (userAbort.signal.aborted) throw new Error("cancelled");
       fatalBackend = true;
-      throw new Error(`could not reach backend at ${BASE_URL} (${(e as Error).message})`);
+      throw new Error(`could not reach backend at ${baseUrl} (${(e as Error).message})`);
     }
 
     if (!res.ok) {
@@ -423,8 +420,8 @@ async function main() {
   process.stdout.write(
     "\n" + bold(cyan("◆ Codespur")) + dim(` v${VERSION} — local PR review`) + "\n" +
     gray(`  source ${src.label}`) + "\n" +
-    gray(`  model  ${MODEL}`) + "\n" +
-    gray(`  engine ${BASE_URL}`) + "\n" +
+    gray(`  model  ${model}`) + "\n" +
+    gray(`  engine ${baseUrl}`) + "\n" +
     gray(`  jobs   ${jobs}`) + "\n" +
     gray(`  files  ${tasks.length} to review` +
       (skipParts.length ? `, skipped ${skipParts.join(", ")}` : "")) + "\n"
@@ -479,7 +476,7 @@ async function finish(tasks: Task[], src: Source) {
     const lines = [
       `# Codespur review`, ``,
       `- Source: \`${src.label}\``,
-      `- Model: \`${MODEL}\``,
+      `- Model: \`${model}\``,
       `- Generated: ${new Date().toISOString()}`, ``, `---`, ``,
     ];
     for (const t of tasks) {
@@ -525,8 +522,8 @@ ${bold("OPTIONS")}
   -v, --version          Print version and exit
 
 ${bold("ENVIRONMENT")}
-  CODESPUR_BASE_URL   OpenAI-compatible endpoint  (default: http://localhost:1234/v1)
-  CODESPUR_MODEL      Model name                  (default: any)
+  CODESPUR_BASE_URL   OpenAI-compatible endpoint  (required, e.g. https://api.openai.com/v1)
+  CODESPUR_MODEL      Model name                  (required, e.g. gpt-4o-mini)
   CODESPUR_API_KEY    API key (optional for local backends)
 
 ${bold("EXAMPLES")}
@@ -567,6 +564,17 @@ if (import.meta.main) {
     process.stdout.write(HELP + "\n");
     process.exit(0);
   }
+
+  const envBase = process.env.CODESPUR_BASE_URL?.replace(/\/+$/, "");
+  const envModel = process.env.CODESPUR_MODEL;
+  if (!envBase) {
+    dieEarly("CODESPUR_BASE_URL not set. Point it at an OpenAI-compatible endpoint (e.g. https://api.openai.com/v1).");
+  }
+  if (!envModel) {
+    dieEarly("CODESPUR_MODEL not set. Specify a model name (e.g. gpt-4o-mini).");
+  }
+  baseUrl = envBase;
+  model = envModel;
 
   base = values.base!;
   custom = values.custom;

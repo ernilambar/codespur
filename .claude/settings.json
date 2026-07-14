@@ -22,7 +22,8 @@
       "Bash(tail *)",
       "Bash(uniq *)",
       "Bash(wc *)",
-      "Bash(which *)"
+      "Bash(which *)",
+      "Bash(bunx tsc *)"
     ],
     "deny": [
       "Bash(chmod *)",

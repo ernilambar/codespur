@@ -38,6 +38,7 @@ export CODESPUR_API_KEY="sk-..."        # optional for local backends
 | Ollama | `http://localhost:11434/v1` |
 | OpenAI | `https://api.openai.com/v1` |
 | DeepSeek | `https://api.deepseek.com/v1` |
+| GitHub Models | `https://models.github.ai/inference` |
 
 ## Usage
 
