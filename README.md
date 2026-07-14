@@ -1,18 +1,18 @@
-# Coblink
+# Codespur
 
 AI-powered PR reviewer.
 
 ## Install
 
-Download the binary for your platform from [Releases](https://github.com/ernilambar/coblink/releases) and put it on your `PATH`.
+Download the binary for your platform from [Releases](https://github.com/ernilambar/codespur/releases) and put it on your `PATH`.
 
 ## Usage
 
 ```bash
-coblink                              # review current branch vs main
-coblink -b develop -j 4              # diff vs develop, 4 files concurrently
-coblink --staged                     # review staged changes before committing
-coblink -o review.md -c "security"   # save a report, security-focused
+codespur                              # review current branch vs main
+codespur -b develop -j 4              # diff vs develop, 4 files concurrently
+codespur --staged                     # review staged changes before committing
+codespur -o review.md -c "security"   # save a report, security-focused
 ```
 
 | Flag | Long | Description | Default |
@@ -31,19 +31,19 @@ coblink -o review.md -c "security"   # save a report, security-focused
 > `--custom` is injected verbatim into the reviewer's system prompt. **Never wire it to untrusted input** (e.g. a PR title or commit message in CI) — a hostile string can override review instructions, exfiltrate diff content, or downgrade severity. Treat it as operator-only.
 
 > [!NOTE]
-> Coblink is **advisory**. Severity is an LLM opinion, not a gate — do not use it to block merges automatically. Pipe the output to a human reviewer or a report.
+> Codespur is **advisory**. Severity is an LLM opinion, not a gate — do not use it to block merges automatically. Pipe the output to a human reviewer or a report.
 
 ## Backend
 
 Set these env vars to point at any OpenAI-compatible backend:
 
 ```bash
-export COBLINK_BASE_URL="http://localhost:1234/v1"
-export COBLINK_MODEL="qwen2.5-coder"
-export COBLINK_API_KEY="sk-..."        # optional for local backends
+export CODESPUR_BASE_URL="http://localhost:1234/v1"
+export CODESPUR_MODEL="qwen2.5-coder"
+export CODESPUR_API_KEY="sk-..."        # optional for local backends
 ```
 
-| Backend | `COBLINK_BASE_URL` |
+| Backend | `CODESPUR_BASE_URL` |
 |---------|--------------------|
 | LM Studio | `http://localhost:1234/v1` |
 | Ollama | `http://localhost:11434/v1` |
@@ -52,11 +52,11 @@ export COBLINK_API_KEY="sk-..."        # optional for local backends
 
 ## Contributing
 
-Single-file source: `coblink.ts`. Uses only `Bun.spawnSync`, `fetch`, and `util.parseArgs` — no external dependencies. Requires [Bun](https://bun.sh).
+Single-file source: `codespur.ts`. Uses only `Bun.spawnSync`, `fetch`, and `util.parseArgs` — no external dependencies. Requires [Bun](https://bun.sh).
 
 ```bash
 bun test             # run tests
-bun run build        # → ./coblink for current platform
+bun run build        # → ./codespur for current platform
 bun run build:all    # → dist/ binaries for mac arm64
 ```
 

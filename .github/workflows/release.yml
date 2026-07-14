@@ -30,7 +30,7 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: coblink-binaries
+          name: codespur-binaries
           path: dist/*
 
       - name: Attach binaries to the GitHub Release
