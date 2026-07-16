@@ -138,6 +138,50 @@ func TestBudgetDiff_noHunksStillTruncates(t *testing.T) {
 	}
 }
 
+// ─────────────────── unit: splitDiffByFile ───────────────────
+
+func TestSplitDiffByFile_simple(t *testing.T) {
+	raw := "diff --git a/foo.go b/foo.go\n--- a/foo.go\n+++ b/foo.go\n@@ -1 +1 @@\n-old\n+new\ndiff --git a/bar.ts b/bar.ts\n--- a/bar.ts\n+++ b/bar.ts\n@@ -1 +1 @@\n-a\n+b\n"
+	files := splitDiffByFile(raw)
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+	if files[0].name != "foo.go" {
+		t.Errorf("files[0].name = %q, want foo.go", files[0].name)
+	}
+	if files[1].name != "bar.ts" {
+		t.Errorf("files[1].name = %q, want bar.ts", files[1].name)
+	}
+}
+
+func TestSplitDiffByFile_rename(t *testing.T) {
+	raw := "diff --git a/old.go b/new.go\nrename from old.go\nrename to new.go\n--- a/old.go\n+++ b/new.go\n@@ -1 +1 @@\n-x\n+y\n"
+	files := splitDiffByFile(raw)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	if files[0].name != "new.go" {
+		t.Errorf("files[0].name = %q, want new.go", files[0].name)
+	}
+}
+
+func TestSplitDiffByFile_deleted(t *testing.T) {
+	raw := "diff --git a/gone.go b/gone.go\ndeleted file mode 100644\n--- a/gone.go\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n"
+	files := splitDiffByFile(raw)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	if files[0].name != "gone.go" {
+		t.Errorf("files[0].name = %q, want gone.go", files[0].name)
+	}
+}
+
+func TestSplitDiffByFile_empty(t *testing.T) {
+	if len(splitDiffByFile("")) != 0 {
+		t.Errorf("expected empty result for empty input")
+	}
+}
+
 // ────────────────────── integration: CLI ──────────────────────
 
 func mockHandler(w http.ResponseWriter, req *http.Request) {
@@ -323,6 +367,75 @@ func TestCLI_unknownBaseBranch(t *testing.T) {
 	}
 	if !strings.Contains(err, "not found") {
 		t.Errorf("stderr missing 'not found': %q", err)
+	}
+}
+
+func TestCLI_diffFile(t *testing.T) {
+	cmd := exec.Command("git", "diff", "main...HEAD")
+	cmd.Dir = testRepo
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal("git diff:", err)
+	}
+	f, err := os.CreateTemp("", "codespur-*.diff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.Write(out); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	stdout, _, code := runCli(t, "--diff-file", f.Name())
+	if code != 0 {
+		t.Errorf("exit code %d\n--- out ---\n%s", code, stdout)
+	}
+	for _, want := range []string{"app.js", "utils.ts", "Summary", "Review complete"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("output missing %q\n--- out ---\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "bun.lockb") {
+		t.Errorf("noise file bun.lockb should be skipped")
+	}
+	if strings.Contains(stdout, "skipped 1 noise") {
+		// good — noise filter still applied from diff file path
+	}
+}
+
+func TestCLI_diffFileNotADiff(t *testing.T) {
+	f, err := os.CreateTemp("", "codespur-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("this is not a diff file\n")
+	f.Close()
+	defer os.Remove(f.Name())
+
+	_, stderr, code := runCli(t, "--diff-file", f.Name())
+	if code != 1 {
+		t.Errorf("expected exit 1, got %d", code)
+	}
+	if !strings.Contains(stderr, "diff --git") {
+		t.Errorf("stderr missing hint: %q", stderr)
+	}
+}
+
+func TestCLI_diffFileStagedConflict(t *testing.T) {
+	f, err := os.CreateTemp("", "codespur-*.diff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+
+	_, stderr, code := runCli(t, "--diff-file", f.Name(), "--staged")
+	if code != 2 {
+		t.Errorf("expected exit 2, got %d", code)
+	}
+	if !strings.Contains(stderr, "--diff-file") {
+		t.Errorf("stderr missing --diff-file notice: %q", stderr)
 	}
 }
 
