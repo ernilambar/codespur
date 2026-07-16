@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,7 +21,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.0.1"
+const VERSION = "1.0.2"
 
 const MaxDiffChars = 24_000
 const defaultIdleSeconds = 120
@@ -263,6 +264,7 @@ type runtime struct {
 	idleMs    int
 	staged    bool
 	working   bool
+	diffFile  string
 	tasks     []*task
 	tasksMu   sync.Mutex
 	interrupt chan struct{}
@@ -323,6 +325,63 @@ func binarySet(src *source) map[string]bool {
 		return map[string]bool{}
 	}
 	return parseNumstatBinaries(r.out)
+}
+
+type fileDiff struct {
+	name string
+	text string
+}
+
+// fileNameFromLines extracts the canonical filename from a per-file diff chunk.
+// Uses "+++ b/<path>" (handles renames correctly), falls back to "--- a/<path>"
+// for deleted files, then the diff --git header for binaries.
+func fileNameFromLines(lines []string) string {
+	for _, line := range lines {
+		if strings.HasPrefix(line, "+++ b/") {
+			return strings.TrimPrefix(line, "+++ b/")
+		}
+	}
+	for _, line := range lines {
+		if strings.HasPrefix(line, "--- a/") {
+			return strings.TrimPrefix(line, "--- a/")
+		}
+	}
+	if len(lines) > 0 {
+		header := strings.TrimPrefix(lines[0], "diff --git ")
+		if idx := strings.LastIndex(header, " b/"); idx >= 0 {
+			return header[idx+3:]
+		}
+	}
+	return ""
+}
+
+// splitDiffByFile splits a git diff into per-file chunks keyed by filename.
+func splitDiffByFile(raw string) []fileDiff {
+	lines := strings.Split(raw, "\n")
+	var chunks [][]string
+	var cur []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			if len(cur) > 0 {
+				chunks = append(chunks, cur)
+			}
+			cur = []string{line}
+		} else {
+			cur = append(cur, line)
+		}
+	}
+	if len(cur) > 0 {
+		chunks = append(chunks, cur)
+	}
+	var result []fileDiff
+	for _, chunk := range chunks {
+		name := fileNameFromLines(chunk)
+		if name == "" {
+			continue
+		}
+		result = append(result, fileDiff{name: name, text: strings.Join(chunk, "\n")})
+	}
+	return result
 }
 
 func (t *task) emit(text string) {
@@ -615,6 +674,10 @@ func (r *runtime) mainLoop() {
 		}
 		tasks = append(tasks, t)
 	}
+	r.runReview(tasks, src.label, skippedNoise, skippedBinary)
+}
+
+func (r *runtime) runReview(tasks []*task, sourceLabel string, skippedNoise, skippedBinary int) {
 	r.tasksMu.Lock()
 	r.tasks = tasks
 	r.tasksMu.Unlock()
@@ -632,7 +695,7 @@ func (r *runtime) mainLoop() {
 	}
 	fmt.Fprint(os.Stdout,
 		"\n"+bold(cyan("◆ Codespur"))+dim(" v"+VERSION+" — local PR review")+"\n"+
-			gray(fmt.Sprintf("  source %s", src.label))+"\n"+
+			gray(fmt.Sprintf("  source %s", sourceLabel))+"\n"+
 			gray(fmt.Sprintf("  model  %s", r.model))+"\n"+
 			gray(fmt.Sprintf("  engine %s", r.baseUrl))+"\n"+
 			gray(fmt.Sprintf("  jobs   %d", r.jobs))+"\n"+
@@ -649,7 +712,7 @@ func (r *runtime) mainLoop() {
 	for _, t := range tasks {
 		select {
 		case <-r.interrupt:
-			r.finish(tasks, src, true)
+			r.finish(tasks, sourceLabel, true)
 			return
 		default:
 		}
@@ -693,10 +756,61 @@ func (r *runtime) mainLoop() {
 		}
 	}
 
-	r.finish(tasks, src, false)
+	r.finish(tasks, sourceLabel, false)
 }
 
-func (r *runtime) finish(tasks []*task, src *source, interrupted bool) {
+func (r *runtime) diffFileLoop(diffPath string) {
+	data, err := os.ReadFile(diffPath)
+	if err != nil {
+		die("cannot read diff file: " + err.Error())
+	}
+
+	raw := strings.TrimSpace(string(data))
+	if raw != "" && !strings.Contains(raw, "diff --git ") {
+		die("file does not appear to be a git diff (no \"diff --git\" header found)")
+	}
+
+	fileDiffs := splitDiffByFile(raw)
+	if len(fileDiffs) == 0 {
+		fmt.Fprint(os.Stdout, yellow("No files found in diff. Nothing to review.\n"))
+		return
+	}
+
+	skippedNoise := 0
+	skippedBinary := 0
+	var tasks []*task
+
+	for _, fd := range fileDiffs {
+		if strings.Contains(fd.text, "Binary files ") || strings.Contains(fd.text, "GIT binary patch") {
+			skippedBinary++
+			continue
+		}
+		if isNoise(fd.name) {
+			skippedNoise++
+			continue
+		}
+		diffBody := strings.TrimSpace(fd.text)
+		if diffBody == "" {
+			continue
+		}
+		res := budgetDiff(diffBody)
+		t := &task{
+			index:     len(tasks) + 1,
+			file:      fd.name,
+			diff:      res.text,
+			truncated: res.truncated,
+			shown:     res.shown,
+			total:     res.total,
+			severity:  "none",
+			doneCh:    make(chan struct{}),
+		}
+		tasks = append(tasks, t)
+	}
+
+	r.runReview(tasks, filepath.Base(diffPath), skippedNoise, skippedBinary)
+}
+
+func (r *runtime) finish(tasks []*task, sourceLabel string, interrupted bool) {
 	anyError := false
 	for _, t := range tasks {
 		if t.err != nil {
@@ -731,7 +845,7 @@ func (r *runtime) finish(tasks []*task, src *source, interrupted bool) {
 		var lines []string
 		lines = append(lines,
 			"# Codespur review", "",
-			fmt.Sprintf("- Source: `%s`", src.label),
+			fmt.Sprintf("- Source: `%s`", sourceLabel),
 			fmt.Sprintf("- Model: `%s`", r.model),
 			fmt.Sprintf("- Generated: %s", time.Now().UTC().Format(time.RFC3339)),
 			"", "---", "",
@@ -784,6 +898,7 @@ const helpTemplate = "%s v%s — AI-powered local PR reviewer\n\n" +
 	"  -o, --out <file>       Also write a markdown report\n" +
 	"      --staged           Review staged changes (git diff --cached)\n" +
 	"      --working          Review modified tracked files (excludes untracked)\n" +
+	"  -f, --diff-file <file> Review a saved git diff file (no git required)\n" +
 	"      --timeout <secs>   Abort a request after N idle seconds (default: %d)\n" +
 	"  -h, --help             Show this help\n" +
 	"  -v, --version          Print version and exit\n\n" +
@@ -843,6 +958,9 @@ func main() {
 	fs.StringVar(&out, "o", "", "")
 	fs.BoolVar(&staged, "staged", false, "")
 	fs.BoolVar(&working, "working", false, "")
+	var diffFile string
+	fs.StringVar(&diffFile, "diff-file", "", "")
+	fs.StringVar(&diffFile, "f", "", "")
 	fs.StringVar(&timeoutStr, "timeout", fmt.Sprintf("%d", defaultIdleSeconds), "")
 	fs.BoolVar(&help, "help", false, "")
 	fs.BoolVar(&help, "h", false, "")
@@ -880,6 +998,7 @@ func main() {
 	r.outPath = out
 	r.staged = staged
 	r.working = working
+	r.diffFile = diffFile
 
 	jobsInt := defaultJobs
 	if n, err := parsePositiveInt(jobsStr); err == nil {
@@ -933,7 +1052,14 @@ func main() {
 		}
 	}()
 
-	r.mainLoop()
+	if r.diffFile != "" {
+		if r.staged || r.working {
+			dieEarly("--diff-file cannot be used with --staged or --working.")
+		}
+		r.diffFileLoop(r.diffFile)
+	} else {
+		r.mainLoop()
+	}
 }
 
 func parsePositiveInt(s string) (int, error) {

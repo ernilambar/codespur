@@ -22,6 +22,22 @@ cd codespur && go build -trimpath -ldflags="-s -w" -o codespur .
 sudo mv codespur /usr/local/bin/
 ```
 
+## Upgrade
+
+**macOS prebuilt binary** — re-download and replace:
+
+```bash
+curl -L -o codespur https://github.com/ernilambar/codespur/releases/latest/download/codespur-darwin-arm64
+sudo mv codespur /usr/local/bin/
+```
+
+**Build from source** — pull and rebuild:
+
+```bash
+cd codespur && git pull && go build -trimpath -ldflags="-s -w" -o codespur .
+sudo mv codespur /usr/local/bin/
+```
+
 ## Configure
 
 Point at any OpenAI-compatible backend:
@@ -46,6 +62,7 @@ export CODESPUR_API_KEY="sk-..."        # optional for local backends
 codespur                              # review current branch vs main
 codespur -b develop -j 4              # diff vs develop, 4 files concurrently
 codespur --staged                     # review staged changes before committing
+codespur -f pr.diff                   # review a downloaded diff file
 codespur -o review.md -c "security"   # save a report, security-focused
 ```
 
@@ -54,6 +71,7 @@ codespur -o review.md -c "security"   # save a report, security-focused
 | `-b` | `--base` | Base branch to diff against | `main` |
 | `-c` | `--custom` | Extra reviewer instructions | — |
 | `-j` | `--jobs` | Files reviewed concurrently | `3` |
+| `-f` | `--diff-file` | Review a saved git diff file | — |
 | `-o` | `--out` | Write a markdown report | — |
 |  | `--staged` | Review staged changes | — |
 |  | `--working` | Review modified tracked files (excludes untracked; `git add` first to include new files) | — |
