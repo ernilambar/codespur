@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,13 +36,23 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags="-s -w" -o dist/codespur-${{ matrix.suffix }} .
 
-      - name: Upload workflow artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: codespur-${{ matrix.suffix }}
           path: dist/*
 
-      - name: Attach binaries to the GitHub Release
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Attach binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
