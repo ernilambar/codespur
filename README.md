@@ -2,7 +2,7 @@
 
 AI-powered PR reviewer.
 
-## Install
+## Install / Upgrade
 
 **macOS** — prebuilt binary (replace `arm64` with `amd64` for Intel Macs):
 
@@ -22,21 +22,7 @@ cd codespur && go build -trimpath -ldflags="-s -w" -o codespur .
 sudo mv codespur /usr/local/bin/
 ```
 
-## Upgrade
-
-**macOS prebuilt binary** — re-download and replace:
-
-```bash
-curl -L -o codespur https://github.com/ernilambar/codespur/releases/latest/download/codespur-darwin-arm64
-sudo mv codespur /usr/local/bin/
-```
-
-**Build from source** — pull and rebuild:
-
-```bash
-cd codespur && git pull && go build -trimpath -ldflags="-s -w" -o codespur .
-sudo mv codespur /usr/local/bin/
-```
+To upgrade from source, replace `git clone …` with `git pull` inside the existing repo directory.
 
 ## Configure
 
