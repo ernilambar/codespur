@@ -1,5 +1,8 @@
 # Codespur Changelog
 
+## 1.0.3 - 2026-07-17
+- Added: `-f` / `--diff-file` now accepts a direct raw diff URL
+
 ## 1.0.2 - 2026-07-16
 - Added: `--diff-file` / `-f` flag to review a saved git diff file
 
