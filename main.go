@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.0.2"
+const VERSION = "1.0.3"
 
 const MaxDiffChars = 24_000
 const defaultIdleSeconds = 120
@@ -759,10 +759,49 @@ func (r *runtime) runReview(tasks []*task, sourceLabel string, skippedNoise, ski
 	r.finish(tasks, sourceLabel, false)
 }
 
-func (r *runtime) diffFileLoop(diffPath string) {
-	data, err := os.ReadFile(diffPath)
+func fetchRemoteDiff(rawURL string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
-		die("cannot read diff file: " + err.Error())
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "codespur/"+VERSION)
+
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("redirects not supported — use the direct raw diff URL")
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(io.LimitReader(resp.Body, 50<<20))
+}
+
+func (r *runtime) diffFileLoop(diffPath string) {
+	var data []byte
+	var err error
+	isURL := strings.HasPrefix(diffPath, "https://") || strings.HasPrefix(diffPath, "http://")
+	if isURL {
+		data, err = fetchRemoteDiff(diffPath)
+		if err != nil {
+			die("cannot fetch remote diff: " + err.Error())
+		}
+	} else {
+		data, err = os.ReadFile(diffPath)
+		if err != nil {
+			die("cannot read diff file: " + err.Error())
+		}
 	}
 
 	raw := strings.TrimSpace(string(data))
@@ -898,7 +937,7 @@ const helpTemplate = "%s v%s — AI-powered local PR reviewer\n\n" +
 	"  -o, --out <file>       Also write a markdown report\n" +
 	"      --staged           Review staged changes (git diff --cached)\n" +
 	"      --working          Review modified tracked files (excludes untracked)\n" +
-	"  -f, --diff-file <file> Review a saved git diff file (no git required)\n" +
+	"  -f, --diff-file <path|url> Review a saved diff file or direct https:// diff URL\n" +
 	"      --timeout <secs>   Abort a request after N idle seconds (default: %d)\n" +
 	"  -h, --help             Show this help\n" +
 	"  -v, --version          Print version and exit\n\n" +

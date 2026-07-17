@@ -182,6 +182,69 @@ func TestSplitDiffByFile_empty(t *testing.T) {
 	}
 }
 
+// ─────────────────── unit: fetchRemoteDiff ───────────────────
+
+func TestFetchRemoteDiff_ok(t *testing.T) {
+	body := "diff --git a/x.go b/x.go\n--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-old\n+new\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	got, err := fetchRemoteDiff(srv.URL + "/foo.diff")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(got) != body {
+		t.Errorf("body mismatch: got %q, want %q", string(got), body)
+	}
+}
+
+func TestFetchRemoteDiff_nonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := fetchRemoteDiff(srv.URL + "/missing.diff")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("error should mention 404: %v", err)
+	}
+}
+
+func TestFetchRemoteDiff_redirectRejected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/other", http.StatusMovedPermanently)
+	}))
+	defer srv.Close()
+
+	_, err := fetchRemoteDiff(srv.URL + "/redirectme.diff")
+	if err == nil {
+		t.Fatal("expected error for redirect, got nil")
+	}
+	if !strings.Contains(err.Error(), "redirect") {
+		t.Errorf("error should mention redirect: %v", err)
+	}
+}
+
+func TestFetchRemoteDiff_userAgent(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	fetchRemoteDiff(srv.URL + "/foo.diff")
+	if !strings.HasPrefix(gotUA, "codespur/") {
+		t.Errorf("expected User-Agent codespur/*, got %q", gotUA)
+	}
+}
+
 // ────────────────────── integration: CLI ──────────────────────
 
 func mockHandler(w http.ResponseWriter, req *http.Request) {
@@ -401,6 +464,32 @@ func TestCLI_diffFile(t *testing.T) {
 	}
 	if strings.Contains(stdout, "skipped 1 noise") {
 		// good — noise filter still applied from diff file path
+	}
+}
+
+func TestCLI_diffFileURL(t *testing.T) {
+	cmd := exec.Command("git", "diff", "main...HEAD")
+	cmd.Dir = testRepo
+	diffBytes, err := cmd.Output()
+	if err != nil {
+		t.Fatal("git diff:", err)
+	}
+
+	diffSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.Write(diffBytes)
+	}))
+	defer diffSrv.Close()
+
+	stdout, _, code := runCli(t, "--diff-file", diffSrv.URL+"/pr.diff")
+	if code != 0 {
+		t.Errorf("exit code %d\n--- out ---\n%s", code, stdout)
+	}
+	for _, want := range []string{"app.js", "utils.ts", "Summary", "Review complete"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("output missing %q\n--- out ---\n%s", want, stdout)
+		}
 	}
 }
 

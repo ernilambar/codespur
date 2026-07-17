@@ -49,6 +49,7 @@ codespur                              # review current branch vs main
 codespur -b develop -j 4              # diff vs develop, 4 files concurrently
 codespur --staged                     # review staged changes before committing
 codespur -f pr.diff                   # review a downloaded diff file
+codespur -f https://patch-diff.githubusercontent.com/raw/org/repo/pull/123.diff  # review a remote diff
 codespur -o review.md -c "security"   # save a report, security-focused
 ```
 
@@ -57,7 +58,7 @@ codespur -o review.md -c "security"   # save a report, security-focused
 | `-b` | `--base` | Base branch to diff against | `main` |
 | `-c` | `--custom` | Extra reviewer instructions | — |
 | `-j` | `--jobs` | Files reviewed concurrently | `3` |
-| `-f` | `--diff-file` | Review a saved git diff file | — |
+| `-f` | `--diff-file` | Review a saved diff file or direct `https://` diff URL | — |
 | `-o` | `--out` | Write a markdown report | — |
 |  | `--staged` | Review staged changes | — |
 |  | `--working` | Review modified tracked files (excludes untracked; `git add` first to include new files) | — |
