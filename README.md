@@ -7,7 +7,7 @@ AI-powered PR reviewer.
 **macOS** — prebuilt binary (replace `arm64` with `amd64` for Intel Macs):
 
 ```bash
-curl -L -o codespur https://github.com/ernilambar/codespur/releases/latest/download/codespur-darwin-arm64
+curl -fL -o codespur https://github.com/ernilambar/codespur/releases/latest/download/codespur-darwin-arm64
 chmod +x codespur
 sudo mv codespur /usr/local/bin/
 sudo xattr -d com.apple.quarantine /usr/local/bin/codespur 2>/dev/null || true
