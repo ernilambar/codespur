@@ -1,5 +1,8 @@
 # Codespur Changelog
 
+## 1.0.4 - 2026-09-09
+- Added: `--issue-file` flag to pass issue/ticket text as review context
+
 ## 1.0.3 - 2026-07-17
 - Added: `-f` / `--diff-file` now accepts a direct raw diff URL
 

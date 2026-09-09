@@ -4,6 +4,15 @@ AI-powered PR reviewer.
 
 ## Install / Upgrade
 
+**macOS** — Homebrew:
+
+```bash
+brew tap ernilambar/tap
+brew trust ernilambar/tap
+brew install ernilambar/tap/codespur
+codespur --version
+```
+
 **macOS** — prebuilt binary (replace `arm64` with `amd64` for Intel Macs):
 
 ```bash
@@ -40,7 +49,6 @@ export CODESPUR_API_KEY="sk-..."        # optional for local backends
 | Ollama | `http://localhost:11434/v1` |
 | OpenAI | `https://api.openai.com/v1` |
 | DeepSeek | `https://api.deepseek.com/v1` |
-| GitHub Models | `https://models.github.ai/inference` |
 
 ## Usage
 
