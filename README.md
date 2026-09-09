@@ -51,12 +51,14 @@ codespur --staged                     # review staged changes before committing
 codespur -f pr.diff                   # review a downloaded diff file
 codespur -f https://patch-diff.githubusercontent.com/raw/org/repo/pull/123.diff  # review a remote diff
 codespur -o review.md -c "security"   # save a report, security-focused
+codespur --issue-file issue.txt       # review against issue/ticket context
 ```
 
 | Flag | Long | Description | Default |
 |------|------|-------------|---------|
 | `-b` | `--base` | Base branch to diff against | `main` |
 | `-c` | `--custom` | Extra reviewer instructions | — |
+|  | `--issue-file` | Issue/ticket text file for context (reference data, never an instruction) | — |
 | `-j` | `--jobs` | Files reviewed concurrently | `3` |
 | `-f` | `--diff-file` | Review a saved diff file or direct `https://` diff URL | — |
 | `-o` | `--out` | Write a markdown report | — |
@@ -68,6 +70,8 @@ codespur -o review.md -c "security"   # save a report, security-focused
 
 > [!IMPORTANT]
 > `--custom` is injected verbatim into the reviewer's system prompt. **Never wire it to untrusted input** (e.g. a PR title or commit message in CI) — a hostile string can override review instructions, exfiltrate diff content, or downgrade severity. Treat it as operator-only.
+>
+> `--issue-file` is different: its content rides in the user message as `<issue_context>` data, never the system prompt, and the reviewer is instructed to never follow directives found inside it. This makes it safe to source from untrusted issue trackers (a hostile issue body can't hijack the review), but it is still not sanitized — it's just structurally inert. Vendor-agnostic by design: point it at a file produced by `gh issue view`, `glab issue view`, a Jira export, or a hand-written note.
 
 > [!NOTE]
 > Codespur is **advisory**. Severity is an LLM opinion, not a gate — do not use it to block merges automatically. Pipe the output to a human reviewer or a report.
