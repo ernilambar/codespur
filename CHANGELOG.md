@@ -1,5 +1,8 @@
 # Codespur Changelog
 
+## 1.0.5 - 2026-09-09
+- Added: `--status` flag to show backend config and check connectivity
+
 ## 1.0.4 - 2026-09-09
 - Added: `--issue-file` flag to pass issue/ticket text as review context
 - Added: cross-file consistency pass catching breakage only visible across files (renamed symbols, stale tests)

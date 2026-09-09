@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-const VERSION = "1.0.4"
+const VERSION = "1.0.5"
 
 const MaxDiffChars = 24_000
 const MaxIssueChars = 8_000
@@ -552,6 +552,57 @@ type sseChunk struct {
 		} `json:"message"`
 		Text string `json:"text"`
 	} `json:"choices"`
+}
+
+// runStatus checks connectivity to the configured backend and prints the
+// result. The API key is never printed, only whether one is set.
+func (r *runtime) runStatus() {
+	fmt.Fprintf(os.Stdout, "Base URL: %s\n", r.baseUrl)
+	fmt.Fprintf(os.Stdout, "Model:    %s\n", r.model)
+	if r.apiKey != "" {
+		fmt.Fprintln(os.Stdout, "API Key:  set")
+	} else {
+		fmt.Fprintln(os.Stdout, "API Key:  not set")
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"model":      r.model,
+		"stream":     false,
+		"max_tokens": 1,
+		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", r.baseUrl+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		fmt.Fprintln(os.Stdout, "Status:   "+red("✖ "+err.Error()))
+		os.Exit(1)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if r.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+r.apiKey)
+	}
+
+	client := &http.Client{Timeout: 0}
+	start := time.Now()
+	res, err := client.Do(req)
+	elapsed := time.Since(start)
+	if err != nil {
+		fmt.Fprintln(os.Stdout, "Status:   "+red(fmt.Sprintf("✖ unreachable (%s)", err.Error())))
+		os.Exit(1)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		buf, _ := io.ReadAll(io.LimitReader(res.Body, 300))
+		fmt.Fprintln(os.Stdout, "Status:   "+red(fmt.Sprintf("✖ HTTP %d %s", res.StatusCode, strings.TrimSpace(string(buf)))))
+		os.Exit(1)
+	}
+
+	io.Copy(io.Discard, res.Body)
+	fmt.Fprintln(os.Stdout, "Status:   "+green(fmt.Sprintf("✔ reachable (%dms)", elapsed.Milliseconds())))
 }
 
 func (r *runtime) review(ctx context.Context, t *task) error {
@@ -1120,6 +1171,7 @@ const helpTemplate = "%s v%s — AI-powered local PR reviewer\n\n" +
 	"      --working          Review modified tracked files (excludes untracked)\n" +
 	"  -f, --diff-file <path|url> Review a saved diff file or direct https:// diff URL\n" +
 	"      --timeout <secs>   Abort a request after N idle seconds (default: %d)\n" +
+	"      --status           Show backend config and check connectivity\n" +
 	"  -h, --help             Show this help\n" +
 	"  -v, --version          Print version and exit\n\n" +
 	"%s\n" +
@@ -1188,6 +1240,8 @@ func main() {
 	fs.BoolVar(&help, "h", false, "")
 	fs.BoolVar(&version, "version", false, "")
 	fs.BoolVar(&version, "v", false, "")
+	var status bool
+	fs.BoolVar(&status, "status", false, "")
 
 	args := normalizeArgs(os.Args[1:])
 	if err := fs.Parse(args); err != nil {
@@ -1215,6 +1269,12 @@ func main() {
 	r.baseUrl = envBase
 	r.model = envModel
 	r.apiKey = os.Getenv("CODESPUR_API_KEY")
+
+	if status {
+		r.runStatus()
+		os.Exit(0)
+	}
+
 	r.base = base
 	r.custom = custom
 	if issueFile != "" {

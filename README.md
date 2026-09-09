@@ -73,6 +73,7 @@ codespur --issue-file issue.txt       # review against issue/ticket context
 |  | `--staged` | Review staged changes | — |
 |  | `--working` | Review modified tracked files (excludes untracked; `git add` first to include new files) | — |
 |  | `--timeout` | Abort after N idle seconds | `120` |
+|  | `--status` | Show backend config (URL, model, API key set/unset) and check connectivity | — |
 | `-h` | `--help` | Show help | — |
 | `-v` | `--version` | Print version | — |
 
