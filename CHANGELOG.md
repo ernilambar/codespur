@@ -2,6 +2,8 @@
 
 ## 1.0.4 - 2026-09-09
 - Added: `--issue-file` flag to pass issue/ticket text as review context
+- Added: cross-file consistency pass catching breakage only visible across files (renamed symbols, stale tests)
+- Changed: per-file reviews now know which other files changed in the same PR, instead of reviewing in isolation
 
 ## 1.0.3 - 2026-07-17
 - Added: `-f` / `--diff-file` now accepts a direct raw diff URL
