@@ -106,4 +106,4 @@ git push origin v1.0.1
 
 ## License
 
-[MIT](http://opensource.org/licenses/MIT) © 2026 [Nilambar Sharma](https://www.nilambar.net)
+[MIT](LICENSE) © [Nilambar Sharma](https://www.nilambar.net)
