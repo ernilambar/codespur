@@ -183,6 +183,13 @@ func budgetDiff(diff string) budgetResult {
 		}
 	}
 	truncated := shown < len(hunks)
+	// The first hunk is always admitted, so a single hunk larger than the budget
+	// can push out past MaxDiffChars on its own. Hard-cut it in that case so the
+	// returned text is never over budget.
+	if len(out) > MaxDiffChars && shown <= 1 {
+		out = out[:MaxDiffChars] + "\n… [diff truncated to fit context budget]"
+		return budgetResult{text: out, truncated: true, shown: shown, total: len(hunks)}
+	}
 	if truncated {
 		out += fmt.Sprintf("\n\n… [diff truncated: %d/%d hunks shown to fit context budget]", shown, len(hunks))
 	}
